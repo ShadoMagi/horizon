@@ -15,7 +15,7 @@
  */
 package com.paypal.horizon
 
-import sbtrelease.ReleaseStep
+import sbtrelease._
 import sbt._
 import sbt.Keys._
 import com.typesafe.sbt.SbtGhPages.GhPagesKeys._
@@ -94,18 +94,11 @@ object ChangelogReleaseSteps extends CommonContext {
   }
 
   private def getChangelogInfo: ChangelogInfo = {
-    try {
-      val msg = System.getProperty("changelog.msg")
-      val msgExists = Option(msg).exists(_.length > 1)
-      val author = System.getProperty("changelog.author")
-      val authorExists = Option(author).exists(_.length > 1)
-      if (msgExists & authorExists) {
-        new ChangelogInfo(msg, author)
-      } else {
-        throw new Exception("msg or author too short")
-      }
-    } catch {
-      case e: Throwable => throw new ChangelogInfoMissingException(e)
+    val optMsg = sys.props.get("changelog.msg").filter(_.length > 1)
+    val optAuthor = sys.props.get("changelog.author").filter(_.length > 1)
+    (optMsg, optAuthor) match {
+      case (Some(msg), Some(author)) => new ChangelogInfo(msg, author)
+      case _ => throw new Exception("changelog.msg or changelog.author too short or missing")
     }
   }
 
@@ -249,5 +242,57 @@ object ScaladocReleaseSteps extends CommonContext {
   lazy val generateAndPushDocs: ReleaseStep = { st: State =>
     val st2 = executeTask(makeSite, "Making doc site")(st)
     executeTask(pushSite, "Publishing doc site")(st2)
+  }
+}
+
+/**
+ * Includes a release step 'checkForVersionDefinitions' to check for system properties or environment variables for the release
+ * version and next version.  Found values are used with system properties having priority over environment variables. If a
+ * value is not found then the default behavior of [[sbtrelease]] is followed and it will prompt for version entry if interactive
+ * or use the defined default function if non-interactive
+ */
+object VersionReleaseSteps extends CommonContext {
+
+  lazy val checkForVersionDefinitions: ReleaseStep = { st: State =>
+    val extracted = Project.extract(st)
+
+    val cmdVars = sys.props
+    val envVars = sys.env
+    val useDefs = st.get(useDefaults).getOrElse(false)
+
+    val releaseVer = cmdVars.getOrElse("release.version", envVars.getOrElse("RELEASE_VERSION", inquireReleaseVer(extracted, useDefs)))
+    val nextVer = cmdVars.getOrElse("next.version", envVars.getOrElse("NEXT_VERSION", inquireNextVer(extracted, useDefs, releaseVer)))
+
+
+    st.put(versions, (releaseVer, nextVer))
+  }
+
+  private def inquireReleaseVer(extracted: Extracted, useDefs: Boolean): String = {
+    {
+      val currentVer = extracted.get(version)
+      val releaseFunc = extracted.get(releaseVersion)
+      val suggestedVer = releaseFunc(currentVer)
+      if(useDefs)
+        suggestedVer
+      else
+        readVersion(suggestedVer, "Release version [%s] : ")
+    }
+  }
+
+  private def inquireNextVer(extracted: Extracted, useDefs: Boolean, releaseVer: String): String = {
+    val nextFunc = extracted.get(nextVersion)
+    val suggestedVer = nextFunc(releaseVer)
+    if(useDefs)
+      suggestedVer
+    else
+      readVersion(suggestedVer, "Next version [%s] : ")
+  }
+
+  private def readVersion(ver: String, prompt: String): String = {
+    SimpleReader.readLine(prompt format ver) match {
+      case Some("") => ver
+      case Some(input) => Version(input).map(_.string).getOrElse(versionFormatError)
+      case None => sys.error("No version provided!")
+    }
   }
 }

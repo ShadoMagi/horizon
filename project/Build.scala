@@ -69,7 +69,7 @@ object BuildSettings {
     Seq(
       ghpagesNoJekyll := false,
       ghpagesDir := extractDirStructure(originUrl),
-      repository <<= ghpagesDir.apply (dir => file(System.getProperty("user.home")) / ".sbt" / "ghpages" / dir),
+      repository <<= ghpagesDir.apply (dir => file(sys.props.getOrElse("user.home", null)) / ".sbt" / "ghpages" / dir),
       siteMappings <++= (mappings in (ScalaUnidoc, packageDoc), version).map { (mapping, ver) =>
         for((file, path) <- mapping) yield (file, s"api/$ver/$path")
       },

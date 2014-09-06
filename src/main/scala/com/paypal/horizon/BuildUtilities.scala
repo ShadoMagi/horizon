@@ -130,7 +130,7 @@ object BuildUtilities extends Plugin with GitInfo {
    */
   lazy val defaultReleaseProcess = Seq[ReleaseStep](
     checkSnapshotDependencies,
-    inquireVersions,
+    VersionReleaseSteps.checkForVersionDefinitions,
     ChangelogReleaseSteps.checkForChangelog,
     runTest,
     setReleaseVersion,
@@ -270,7 +270,7 @@ object BuildUtilities extends Plugin with GitInfo {
       gitRemoteRepo := originUrl,
       ghpagesNoJekyll := false,
       ghpagesDir := extractDirStructure(originUrl),
-      repository <<= ghpagesDir.apply (dir => file(System.getProperty("user.home")) / ".sbt" / "ghpages" / dir),
+      repository <<= ghpagesDir.apply (dir => file(sys.props.getOrElse("user.home", null)) / ".sbt" / "ghpages" / dir),
       siteMappings <++= (mappings in (ScalaUnidoc, packageDoc), version).map { (mapping, ver) =>
         for((file, path) <- mapping) yield (file, (s"api/$ver/$path"))
       },
